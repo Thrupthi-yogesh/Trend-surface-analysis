@@ -1,0 +1,49 @@
+ %% read data 
+T = readtable("Imd_Data_AP.csv");
+lat = T.Lat;                          % X-coordinate
+lon = T.Lon;                          % Y-coordinate
+Y   = T.Rainfall_mm_;                % Rainfall values
+qqplot(Y);
+
+S = shaperead("reprojected.shp");
+
+%% grid from shapefile extent
+res = 0.1;
+allX = [S.X];
+allY = [S.Y];
+
+[xq,yq] = meshgrid(min(allX):res:max(allX), ...
+                   min(allY):res:max(allY));
+
+%% GPR kriging
+X = [lon lat];
+
+gprMd1 = fitrgp(X, Y, ...
+    'KernelFunction','squaredexponential', ...
+    'BasisFunction','constant', ...
+    'Standardize',true);
+
+%% predict on grid
+Xq = [xq(:) yq(:)];
+zq = predict(gprMd1, Xq);
+zq = reshape(zq, size(xq));
+
+%% mask to AP
+mask = false(size(xq));
+for k = 1:numel(S)
+    mask = mask | inpolygon(xq, yq, S(k).X, S(k).Y);
+end
+zq(~mask) = NaN;
+
+%% plot
+figure
+surf(xq, yq, zq)
+shading interp
+colorbar
+xlabel('Longitude')
+ylabel('Latitude')
+title('Trend analysis of rainfall')
+
+hold on
+plot([S.X],[S.Y],'k','LineWidth',1.5)
+hold off
